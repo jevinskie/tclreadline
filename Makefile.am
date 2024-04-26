@@ -10,12 +10,16 @@
 
 ## AUTOMAKE_OPTIONS = foreign
 
+ACLOCAL_AMFLAGS = -I m4
+
+libdir = @TCLRL_DIR@
+
 lib_LTLIBRARIES = libtclreadline.la
 
 libtclreadline_la_SOURCES = config.h tclreadline.c tclreadline.h
 include_HEADERS = tclreadline.h
 
-INCLUDES = -I$(TCL_INCLUDE_DIR) -I$(READLINE_INCLUDE_DIR)
+AM_CPPFLAGS = -I$(TCL_INCLUDE_DIR) -I$(READLINE_INCLUDE_DIR)
 
 if !USE_TCL_STUBS
     libtclreadline_la_CFLAGS = -Wall
