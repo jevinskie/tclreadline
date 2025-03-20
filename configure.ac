@@ -8,7 +8,7 @@ dnl Copyright (c) 1998 - 2014, Johannes Zellner <johannes@zellner.org>
 dnl This software is copyright under the BSD license.
 dnl ---
 
-AC_INIT([tclreadline],[2.3.8])
+AC_INIT([tclreadline],[2.4.0])
 AC_CONFIG_AUX_DIR(./aux)
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_CONFIG_SRCDIR([tclreadline.c])
@@ -237,6 +237,16 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[
 ]])],[AC_MSG_RESULT(yes);
     AC_DEFINE(CLEANUP_AFER_SIGNAL, 1,
      Define if rl_cleanup_after_signal is resolved in libreadline. )],[AC_MSG_RESULT(no)])
+
+# check for readline's rl_extend_line_buffer
+
+AC_MSG_CHECKING([for rl_extend_line_buffer() in -lreadline])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[
+    extern void rl_extend_line_buffer(int len);
+    rl_extend_line_buffer(1);
+]])],[AC_MSG_RESULT(yes);
+    AC_DEFINE(EXTEND_LINE_BUFFER, 1,
+     Define if rl_extend_line_buffer is resolved in libreadline. )],[AC_MSG_RESULT(no)])
 
 
 AC_MSG_CHECKING([for the readline version number])

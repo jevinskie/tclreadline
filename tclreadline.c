@@ -25,12 +25,33 @@
 #  include <readline/history.h>
 #endif
 
+/* Check, if Tcl version supports Tcl_Size,
+ * which was introduced in Tcl 8.7 and 9.
+ */
+#ifndef TCL_SIZE_MAX
+#include <limits.h>
+#define TCL_SIZE_MAX INT_MAX
 
+#ifndef Tcl_Size
+typedef int Tcl_Size;
+#endif
+
+#define TCL_SIZE_MODIFIER ""
+#define Tcl_GetSizeIntFromObj Tcl_GetIntFromObj
+#endif
+
+/* TCL 9 does not define CONST anymore */
+#ifndef CONST
+#define CONST const
+#endif
+
+#ifdef EXTEND_LINE_BUFFER
 /*
  * this prototype may be missing
  * in readline.h
  */
 void rl_extend_line_buffer(int len);
+#endif
 
 #ifdef EXECUTING_MACRO_HACK
 /**
@@ -524,29 +545,32 @@ TclReadlineLineCompleteHandler(char* ptr)
          */
 
         char* expansion = (char*) NULL;
+        char* expand_output = (char*) NULL;
         if (tclrl_use_history_expansion) {
-            int status = history_expand(ptr, &expansion);
+            int status = history_expand(ptr, &expand_output);
 
             if (status >= 2) {
                 /* TODO: make this a valid tcl output */
-                printf("%s\n", expansion);
+                printf("%s\n", expand_output);
                 FREE(ptr);
-                FREE(expansion);
+                FREE(expand_output);
                 return;
             } else if (status <= -1) {
                 Tcl_AppendResult
-                    (tclrl_interp, "error in history expansion: ", expansion, "\n", (char*) NULL);
+                    (tclrl_interp, "error in history expansion: ", expand_output, "\n", (char*) NULL);
                 TclReadlineTerminate(TCL_ERROR);
                 FREE(ptr);
-                FREE(expansion);
+                FREE(expand_output);
                 return;
-            } else {
-                Tcl_AppendResult(tclrl_interp, expansion, (char*) NULL);
+            } else if (status == 0) {
+                expansion = ptr;
+            } else { /* status == 1 */
+                expansion = expand_output;
             }
         } else {
-            Tcl_AppendResult(tclrl_interp, ptr, (char*) NULL);
             expansion = ptr;
         }
+        Tcl_AppendResult(tclrl_interp, expansion, (char*) NULL);
 
     #ifdef EXECUTING_MACRO_NAME
         /**
@@ -576,9 +600,7 @@ TclReadlineLineCompleteHandler(char* ptr)
          */
         TclReadlineTerminate(LINE_COMPLETE);
         FREE(ptr);
-        if (tclrl_use_history_expansion) {
-            FREE(expansion);
-        }
+        FREE(expand_output);
     }
 }
 
@@ -592,9 +614,15 @@ int
 Tclreadline_Init(Tcl_Interp *interp)
 {
     int status;
- #ifdef USE_TCL_STUBS
-     Tcl_InitStubs(interp, "8.6", 0);
+    /* Require 8.6 or later (9.0 also ok) */
+#ifdef USE_TCL_STUBS
+    if ( NULL == Tcl_InitStubs(interp, "8.6-", 0))
+#else
+    if (NULL == Tcl_PkgRequire(interp, "Tcl", "8.6-", 0))
 #endif
+    {
+        return TCL_ERROR;
+    }
     Tcl_CreateObjCommand(interp, "::tclreadline::readline", TclReadlineCmd,
         (ClientData) NULL, (Tcl_CmdDeleteProc *) NULL);
     tclrl_interp = interp;
@@ -699,6 +727,10 @@ TclReadlineCompletion(char* text, int start, int end)
     int status;
     rl_completion_append_character = ' '; /* reset, just in case ... */
 
+    /* Only enable history expansion like '!!<TAB>' if the rl_extend_line_buffer
+     * function is available; e.g. libedit doesn't provide it, and alternative
+     * approaches to replace the line buffer don't give the desired behavior */
+#ifdef EXTEND_LINE_BUFFER
     if (tclrl_use_history_expansion && text && ('!' == text[0]
             || (start && rl_line_buffer[start - 1] == '!' /* for '$' */))) {
         char* expansion = (char*) NULL;
@@ -720,12 +752,13 @@ TclReadlineCompletion(char* text, int start, int end)
         }
         FREE(expansion);
     }
+#endif
 
     if (tclrl_custom_completer) {
         char start_s[BUFSIZ], end_s[BUFSIZ];
         Tcl_Obj* obj;
         Tcl_Obj** objv;
-        int objc;
+        Tcl_Size objc;
         int state;
         char* quoted_text = TclReadlineQuote(text, "$[]{}\"");
         char* quoted_rl_line_buffer = TclReadlineQuote(rl_line_buffer, "$[]{}\"");
@@ -752,7 +785,8 @@ TclReadlineCompletion(char* text, int start, int end)
             return matches;
 
         if (objc) {
-            int i, length;
+            int i;
+            Tcl_Size length;
             matches = (char**) MALLOC(sizeof(char*) * (objc + 1));
             for (i = 0; i < objc; i++) {
                 matches[i] = strdup(Tcl_GetStringFromObj(objv[i], &length));
