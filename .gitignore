@@ -7,3 +7,10 @@ tclreadline.n
 tclreadlineInit.tcl
 tclreadlineSetup.tcl
 Makefile
+.deps/
+.libs/
+autom4te.cache/
+libtclreadline.la
+libtclreadline_la-tclreadline.lo
+libtool
+stamp-h1
